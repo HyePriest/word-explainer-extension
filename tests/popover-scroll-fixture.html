@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Popover loading scroll regression</title>
+  <style>
+    body { margin: 0; min-height: 2400px; font: 20px/1.6 sans-serif; }
+    main { padding: 280px 80px 0; }
+    #target { max-width: 720px; }
+    #status { position: fixed; right: 12px; bottom: 10px; z-index: 2; }
+  </style>
+</head>
+<body>
+  <main>
+    <p id="target">The translation popover must stay at the same document position while a response is still loading.</p>
+  </main>
+  <div id="status">waiting</div>
+  <script>
+    globalThis.chrome = {
+      storage: {
+        local: {
+          get(defaults, callback) { callback({ ...defaults, enabled: true, panelPinned: false }); },
+          set() {},
+          remove() {},
+        },
+        onChanged: { addListener() {} },
+      },
+      runtime: {
+        getURL(path) { return new URL(`../${path}`, location.href).href; },
+        onMessage: { addListener() {} },
+        connect() {
+          const listeners = [];
+          return {
+            onMessage: { addListener(listener) { listeners.push(listener); } },
+            onDisconnect: { addListener() {} },
+            disconnect() {},
+            postMessage() {
+              setTimeout(() => listeners.forEach((listener) => listener({ type: 'CHUNK', text: '**译文：**\n加载期间的第一段。' })), 700);
+              setTimeout(() => listeners.forEach((listener) => listener({ type: 'CHUNK', text: '\n\n加载期间的第二段。' })), 900);
+              setTimeout(() => listeners.forEach((listener) => listener({ type: 'DONE' })), 1100);
+            },
+          };
+        },
+      },
+    };
+  </script>
+  <script src="../positioning.js"></script>
+  <script src="../output-formatting.js"></script>
+  <script src="../shortcuts.js"></script>
+  <script src="../theme.js"></script>
+  <script>
+    window.addEventListener('load', () => {
+      // 已安装的开发版也可能注入同名根节点；等待它完成后再建立隔离的测试实例。
+      setTimeout(() => {
+        document.getElementById('we-extension-root')?.remove();
+        const contentScript = document.createElement('script');
+        contentScript.src = `../content.js?fixture=${Date.now()}`;
+        contentScript.addEventListener('load', () => {
+        window.scrollTo(0, 0);
+        const target = document.getElementById('target');
+        window.__wordExplainer.explainText(target.textContent, { rect: target.getBoundingClientRect(), mode: 'ZH' });
+
+        let initialViewportTop = null;
+        let initialDocumentTop = null;
+        let loadingMetrics = null;
+        setTimeout(() => {
+          const popover = document.getElementById('we-extension-root')?.shadowRoot?.querySelector('.we-popover');
+          initialViewportTop = popover?.getBoundingClientRect().top ?? null;
+          initialDocumentTop = initialViewportTop == null ? null : initialViewportTop + window.scrollY;
+          window.scrollTo(0, 420);
+        }, 350);
+
+        setTimeout(() => {
+          const popover = document.getElementById('we-extension-root')?.shadowRoot?.querySelector('.we-popover');
+          const loadingViewportTop = popover?.getBoundingClientRect().top ?? null;
+          const loadingDocumentTop = loadingViewportTop == null ? null : loadingViewportTop + window.scrollY;
+          const loading = popover?.querySelector('.we-loading');
+          const viewportDelta = initialViewportTop == null || loadingViewportTop == null
+            ? null
+            : loadingViewportTop - initialViewportTop;
+          const documentDelta = initialDocumentTop == null || loadingDocumentTop == null
+            ? null
+            : loadingDocumentTop - initialDocumentTop;
+          loadingMetrics = {
+            initialViewportTop,
+            loadingViewportTop,
+            initialDocumentTop,
+            loadingDocumentTop,
+            viewportDelta,
+            documentDelta,
+          };
+          document.body.dataset.loadingViewportDelta = String(viewportDelta);
+          document.body.dataset.loadingDocumentDelta = String(documentDelta);
+          document.body.dataset.loadingVisible = String(!!loading && getComputedStyle(loading).display !== 'none');
+        }, 600);
+
+        // 两段流式内容已经写入但 DONE 尚未到达，确认尺寸变化没有重新定位翻译框。
+        setTimeout(() => {
+          const popover = document.getElementById('we-extension-root')?.shadowRoot?.querySelector('.we-popover');
+          const streamingViewportTop = popover?.getBoundingClientRect().top ?? null;
+          const streamingDocumentTop = streamingViewportTop == null ? null : streamingViewportTop + window.scrollY;
+          const streamingDocumentDelta = initialDocumentTop == null || streamingDocumentTop == null
+            ? null
+            : streamingDocumentTop - initialDocumentTop;
+          document.body.dataset.ready = 'true';
+          document.body.dataset.streamingDocumentDelta = String(streamingDocumentDelta);
+          document.getElementById('status').textContent = JSON.stringify({
+            ...loadingMetrics,
+            streamingViewportTop,
+            streamingDocumentTop,
+            streamingDocumentDelta,
+          });
+        }, 1000);
+        }, { once: true });
+        document.body.appendChild(contentScript);
+      }, 250);
+    }, { once: true });
+  </script>
+</body>
+</html>

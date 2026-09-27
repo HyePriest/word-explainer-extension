@@ -1,0 +1,13 @@
+Tesseract.js 7.0.0
+Tesseract.js Core 7.0.0
+English trained data: @tesseract.js-data/eng 1.0.0 (4.0.0_best_int)
+
+The OCR engine, WebAssembly cores, worker and English model are bundled locally.
+
+Integrity note for Word Explainer 2.4.1:
+tesseract-core-relaxedsimd-lstm.wasm.js was restored from the official
+tesseract.js-core 7.0.0 npm package after the earlier bundled copy was found
+to be truncated. SHA-256: 861a536cf9ef8e63cb644d57bab39c388f37f7d6b6f60024b741c5f6b39a59b3
+
+Word Explainer 2.4.2 pins Chrome OCR to the validated SIMD LSTM core file so
+an older cached Relaxed SIMD script cannot be selected after an extension reload.

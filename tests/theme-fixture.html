@@ -1,0 +1,276 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Word Explainer theme rendering fixture</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; min-height: 1100px; background: #eef1f5; color: #253047; font: 15px/1.65 system-ui, sans-serif; }
+    main { width: 380px; padding: 28px; }
+    h1 { font-size: 23px; line-height: 1.35; }
+    label { display: block; margin: 16px 0 5px; font-weight: 600; }
+    select, button { width: 100%; padding: 9px 12px; border: 1px solid #a4aec1; border-radius: 7px; background: white; color: #253047; font: inherit; }
+    button { margin-top: 12px; cursor: pointer; }
+    small { color: #57647c; }
+    #status { white-space: pre-wrap; overflow-wrap: anywhere; font: 12px/1.6 ui-monospace, monospace; }
+    #status[data-state="passed"] { color: #166534; }
+    #status[data-state="failed"] { color: #b91c1c; }
+    .note { margin-top: 18px; padding: 12px; background: #fff; border-left: 3px solid #6875a4; }
+    @media (max-width: 700px) { main { width: 260px; padding: 16px; } }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>黑暗模式 · 实际翻译框</h1>
+    <p>右侧由实际 content.js 和 popover.css 渲染；响应、设置和系统主题均由本页模拟。</p>
+    <label for="theme-select">外观偏好</label>
+    <select id="theme-select">
+      <option value="system">跟随系统</option>
+      <option value="light">浅色</option>
+      <option value="dark">深色</option>
+    </select>
+    <label for="system-select">模拟系统外观</label>
+    <select id="system-select">
+      <option value="light">浅色系统</option>
+      <option value="dark" selected>深色系统</option>
+    </select>
+    <button id="external-change" type="button">模拟另一页面修改设置</button>
+    <button id="self-test" type="button" disabled>运行界面自检</button>
+    <p id="resolved-state">正在载入…</p>
+    <div class="note">检查 OCR 原文、标题、强调、代码、列表、表格、分割线和滚动条。切换过程中翻译框应保持内容、位置及滚动位置。</div>
+    <p><small>不连接模型，不读取真实 API Key，不修改扩展设置。页面背景应始终保持浅色。</small></p>
+    <pre id="status" data-state="loading">正在载入实际脚本…</pre>
+  </main>
+  <script>
+    // This page deliberately uses a complete in-memory API. Nothing is forwarded
+    // to an installed extension or to browser storage.
+    const fixtureStorage = {
+      theme: 'system', enabled: true, panelPinned: true, showQuickSave: false,
+      panelPosition: { left: innerWidth > 700 ? 410 : 275, top: 28 },
+      panelSize: { width: Math.min(620, Math.max(280, innerWidth - 445)), height: Math.min(780, innerHeight - 56) },
+    };
+    const storageListeners = new Set();
+    const requestedKeys = [];
+    const explanationRequests = [];
+    const mediaListeners = new Set();
+    const actualMatchMedia = window.matchMedia.bind(window);
+    const mockMedia = {
+      media: '(prefers-color-scheme: dark)', matches: true, onchange: null,
+      addEventListener(type, listener) { if (type === 'change') mediaListeners.add(listener); },
+      removeEventListener(type, listener) { if (type === 'change') mediaListeners.delete(listener); },
+      addListener(listener) { mediaListeners.add(listener); },
+      removeListener(listener) { mediaListeners.delete(listener); },
+    };
+    window.matchMedia = (query) => query === mockMedia.media ? mockMedia : actualMatchMedia(query);
+    function setSystemTheme(dark) {
+      if (mockMedia.matches === dark) return;
+      mockMedia.matches = dark;
+      const event = { type: 'change', matches: dark, media: mockMedia.media };
+      mediaListeners.forEach((listener) => listener(event));
+      mockMedia.onchange?.(event);
+    }
+    async function writeFixtureStorage(values) {
+      const changes = {};
+      for (const [key, newValue] of Object.entries(values)) {
+        const oldValue = fixtureStorage[key];
+        fixtureStorage[key] = newValue;
+        if (oldValue !== newValue) changes[key] = { oldValue, newValue };
+      }
+      if (Object.keys(changes).length) storageListeners.forEach((listener) => listener(changes, 'local'));
+    }
+    const sampleSource = 'The evening light fell softly across the page.\nEach unfamiliar word became a little clearer.';
+    const sampleMarkdown = [
+      '## 夜间阅读示例',
+      '**译文：**',
+      '傍晚的光线柔和地洒在书页上。每一个陌生的单词都变得更清楚了一点。',
+      '',
+      '### 词汇与表达',
+      '- **softly**：轻柔地。强调文字应保持清晰。',
+      '- *a little clearer*：更清楚一点。这里展示斜体。',
+      '- 行内代码：`prefers-color-scheme` 与 `theme = dark`。',
+      '',
+      '| 表达 | 理解 |',
+      '| --- | --- |',
+      '| evening light | 傍晚的光线 |',
+      '| unfamiliar word | 陌生的单词 |',
+      '',
+      '---',
+      '### 阅读提示',
+      '可以在这段解释中继续划词。自检只切换外观，不发送新的解释请求。',
+      '',
+      '这段文字用于检查滚动位置。主题切换完成后，眼前的这一行应留在原来的位置。',
+      '',
+      '最后一段用于检查底部间距、滚动条与正文颜色。The explanation stays in the same panel.',
+    ].join('\n');
+    globalThis.chrome = {
+      storage: {
+        local: {
+          get(keys, callback) {
+            const names = Array.isArray(keys) ? keys : Object.keys(keys || fixtureStorage);
+            requestedKeys.push(...names);
+            const values = Object.fromEntries(names.map((key) => [key, fixtureStorage[key] ?? keys?.[key]]));
+            if (callback) { callback(values); return; }
+            return Promise.resolve(values);
+          },
+          set: writeFixtureStorage,
+          async remove(keys) { for (const key of Array.isArray(keys) ? keys : [keys]) delete fixtureStorage[key]; },
+        },
+        onChanged: {
+          addListener(listener) { storageListeners.add(listener); },
+          removeListener(listener) { storageListeners.delete(listener); },
+        },
+      },
+      runtime: {
+        getURL(path) { return new URL(`../${path}`, location.href).href; },
+        onMessage: { addListener() {} },
+        sendMessage() { return Promise.resolve({ ok: true, result: { saved: false } }); },
+        connect() {
+          const listeners = new Set();
+          const disconnectListeners = new Set();
+          let disconnected = false;
+          return {
+            onMessage: { addListener(listener) { listeners.add(listener); } },
+            onDisconnect: { addListener(listener) { disconnectListeners.add(listener); } },
+            disconnect() { disconnected = true; disconnectListeners.forEach((listener) => listener()); },
+            postMessage(message) {
+              explanationRequests.push(message);
+              setTimeout(() => {
+                if (disconnected) return;
+                listeners.forEach((listener) => listener({ type: 'CHUNK', text: sampleMarkdown }));
+                listeners.forEach((listener) => listener({ type: 'DONE' }));
+              }, 30);
+            },
+          };
+        },
+      },
+    };
+    const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+    const statusEl = document.getElementById('status');
+    const themeSelect = document.getElementById('theme-select');
+    const systemSelect = document.getElementById('system-select');
+    let lastTheme;
+    let testsRunning = false;
+    function fail(error) {
+      document.body.dataset.ready = 'false';
+      document.body.dataset.selfTest = 'failed';
+      document.body.dataset.error = error.message;
+      statusEl.dataset.state = 'failed';
+      statusEl.textContent = error.stack || error.message;
+    }
+    window.addEventListener('error', (event) => fail(new Error(event.message)));
+    window.addEventListener('unhandledrejection', (event) => fail(event.reason instanceof Error ? event.reason : new Error(String(event.reason))));
+  </script>
+  <script src="../positioning.js"></script>
+  <script src="../output-formatting.js"></script>
+  <script src="../shortcuts.js"></script>
+  <script src="../theme.js"></script>
+  <script>
+    WordExplainerTheme.subscribe((state) => {
+      lastTheme = state;
+      themeSelect.value = state.preference;
+      document.getElementById('resolved-state').textContent = `偏好：${state.preference}；实际外观：${state.resolved}`;
+    });
+    themeSelect.addEventListener('change', () => WordExplainerTheme.setPreference(themeSelect.value));
+    systemSelect.addEventListener('change', () => setSystemTheme(systemSelect.value === 'dark'));
+    document.getElementById('external-change').addEventListener('click', () => writeFixtureStorage({ theme: lastTheme.resolved === 'dark' ? 'light' : 'dark' }));
+    document.getElementById('self-test').addEventListener('click', () => runSelfTest().catch(fail));
+
+    async function runSelfTest() {
+      if (testsRunning) return;
+      testsRunning = true;
+      const controls = [...document.querySelectorAll('select, button')];
+      controls.forEach((control) => { control.disabled = true; });
+      const originalPreference = fixtureStorage.theme;
+      const originalSystem = mockMedia.matches;
+      const host = document.getElementById('we-extension-root');
+      const popover = host.shadowRoot.querySelector('.we-popover');
+      const body = popover.querySelector('.we-body');
+      const resultHtml = popover.querySelector('.we-result').innerHTML;
+      const sourceText = popover.querySelector('.we-ocr-source-text').textContent;
+      const initialRect = popover.getBoundingClientRect();
+      const scrollTop = body.scrollTop;
+      const requestCount = explanationRequests.length;
+      const surroundingColor = getComputedStyle(document.body).backgroundColor;
+      const checks = [];
+      const assert = (condition, label) => { checks.push({ label, passed: !!condition }); if (!condition) throw new Error(label); };
+      async function checkState(expected, label) {
+        await wait(90);
+        const current = host.shadowRoot.querySelector('.we-popover');
+        const rect = current.getBoundingClientRect();
+        assert(host.dataset.weTheme === expected, `${label}: resolved ${expected}`);
+        assert(getComputedStyle(host).colorScheme === expected, `${label}: native color scheme`);
+        assert(current === popover, `${label}: same popover node`);
+        assert(current.querySelector('.we-result').innerHTML === resultHtml, `${label}: result preserved`);
+        assert(current.querySelector('.we-ocr-source-text').textContent === sourceText, `${label}: OCR preserved`);
+        assert(['left', 'top', 'width', 'height'].every((key) => Math.abs(rect[key] - initialRect[key]) < 1), `${label}: geometry preserved`);
+        assert(Math.abs(body.scrollTop - scrollTop) < 1, `${label}: scroll preserved`);
+        assert(explanationRequests.length === requestCount, `${label}: no explanation request`);
+        assert(getComputedStyle(document.body).backgroundColor === surroundingColor, `${label}: surrounding page unchanged`);
+      }
+      try {
+        statusEl.dataset.state = 'running';
+        statusEl.textContent = '正在检查主题事件和翻译框状态…';
+        assert(['h2', 'h3', 'strong', 'em', 'code', 'table', 'hr', 'ul'].every((selector) => popover.querySelector(`.we-result ${selector}`)), 'actual Markdown elements rendered');
+        assert(sourceText === sampleSource, 'raw OCR line breaks preserved');
+        await WordExplainerTheme.setPreference('light');
+        await checkState('light', 'manual light');
+        const lightColor = getComputedStyle(popover).backgroundColor;
+        await writeFixtureStorage({ theme: 'dark' });
+        await checkState('dark', 'external storage event');
+        assert(getComputedStyle(popover).backgroundColor !== lightColor, 'light and dark have different actual backgrounds');
+        await WordExplainerTheme.setPreference('system');
+        setSystemTheme(false);
+        await checkState('light', 'system light');
+        setSystemTheme(true);
+        await checkState('dark', 'system dark');
+        await WordExplainerTheme.setPreference('light');
+        setSystemTheme(false);
+        setSystemTheme(true);
+        await checkState('light', 'manual preference survives system change');
+        assert(!requestedKeys.includes('apiKey'), 'no API key requested');
+        document.body.dataset.selfTest = 'passed';
+        document.body.dataset.result = JSON.stringify({ passed: true, assertions: checks.length, requests: requestCount, checks });
+        document.body.dataset.ready = 'true';
+        delete document.body.dataset.error;
+        statusEl.dataset.state = 'passed';
+        statusEl.textContent = `PASS · ${checks.length} 项检查\n同一翻译框，内容/坐标/滚动位置保持不变。\n解释请求次数：${requestCount}\n模拟系统和 storage 通知均已验证。`;
+      } finally {
+        setSystemTheme(originalSystem);
+        systemSelect.value = originalSystem ? 'dark' : 'light';
+        await WordExplainerTheme.setPreference(originalPreference);
+        controls.forEach((control) => { control.disabled = false; });
+        testsRunning = false;
+      }
+    }
+
+    window.addEventListener('load', async () => {
+      try {
+        await WordExplainerTheme.ready;
+        // A separately installed development copy may inject its own host.
+        // Let that settle before loading this page's mocked instance.
+        await wait(300);
+        document.getElementById('we-extension-root')?.remove();
+        await new Promise((resolve, reject) => {
+          const script = document.createElement('script');
+          script.src = `../content.js?theme-fixture=${Date.now()}`;
+          script.onload = resolve;
+          script.onerror = () => reject(new Error('Could not load content.js'));
+          document.body.appendChild(script);
+        });
+        const opened = window.__wordExplainer.explainText(sampleSource, {
+          mode: 'ZH', kind: 'ocr', context: sampleSource,
+          source: { kind: 'ocr', title: 'Theme fixture', url: location.href, documentId: 'theme-fixture', page: null },
+        });
+        if (!opened.ok) throw new Error(opened.message);
+        await wait(650);
+        const popover = document.getElementById('we-extension-root').shadowRoot.querySelector('.we-popover');
+        if (!popover?.querySelector('.we-result table')) throw new Error('Actual content rendering did not complete');
+        // Exercise scroll preservation when the current viewport is short.
+        popover.querySelector('.we-body').scrollTop = 24;
+        await runSelfTest();
+      } catch (error) { fail(error); }
+    }, { once: true });
+  </script>
+</body>
+</html>

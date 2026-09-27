@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-we-theme-page>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PDF 阅读器 · 划词解释</title>
+  <script src="../theme.js"></script>
+  <link rel="stylesheet" href="reader.css">
+</head>
+<body>
+  <header class="toolbar">
+    <div class="brand" title="PDF 阅读器">
+      <span class="brand-mark">W</span>
+      <span class="brand-text">PDF Reader</span>
+    </div>
+
+    <div class="toolbar-group open-group">
+      <button id="open-file" class="primary-button" type="button">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h6l2 2h8v9a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7zm0 4h16"/></svg>
+        打开文件
+      </button>
+      <button id="new-reader" class="icon-button compact-button" type="button" title="在新标签页打开另一个 PDF" aria-label="新建 PDF 阅读器">＋</button>
+      <input id="file-input" type="file" accept="application/pdf,.pdf" hidden>
+      <form id="url-form" class="url-form">
+        <input id="url-input" type="url" inputmode="url" placeholder="粘贴 PDF 网址" aria-label="PDF 网址">
+        <button type="submit" title="打开网址" aria-label="打开 PDF 网址">打开</button>
+      </form>
+    </div>
+
+    <div class="document-title" id="document-title">尚未打开 PDF</div>
+
+    <div class="toolbar-group navigation-group" aria-label="页码导航">
+      <button id="previous-page" class="icon-button" type="button" title="上一页" aria-label="上一页">‹</button>
+      <input id="page-input" class="page-input" type="number" min="1" value="1" aria-label="当前页码" disabled>
+      <span class="page-count">/ <span id="page-count">0</span></span>
+      <button id="next-page" class="icon-button" type="button" title="下一页" aria-label="下一页">›</button>
+    </div>
+
+    <div class="toolbar-group zoom-group" aria-label="缩放控制">
+      <button id="zoom-out" class="icon-button" type="button" title="缩小" aria-label="缩小">−</button>
+      <label class="zoom-input-wrap" title="输入 40～350 之间的缩放比例">
+        <input id="zoom-input" class="zoom-input" type="text" inputmode="decimal" value="100" aria-label="缩放百分比">
+        <span>%</span>
+      </label>
+      <button id="zoom-in" class="icon-button" type="button" title="放大" aria-label="放大">+</button>
+      <button id="fit-width" class="icon-button fit-button" type="button" title="适合页面宽度" aria-label="适合页面宽度">↔</button>
+    </div>
+
+    <div class="toolbar-group reader-tools" aria-label="阅读工具">
+      <button id="open-vocabulary" class="tool-button" type="button" title="打开生词本">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.8l2.45 4.96 5.48.8-3.97 3.86.94 5.46L12 16.3l-4.9 2.58.94-5.46-3.97-3.86 5.48-.8L12 3.8z"/></svg>
+        生词本
+      </button>
+      <button id="ocr-mode" class="tool-button" type="button" title="框选扫描文字并在本机识别" disabled>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 3H4v4M16 3h4v4M8 21H4v-4M16 21h4v-4M7 9h10M7 12h10M7 15h7"/></svg>
+        OCR
+      </button>
+      <button id="collapse-toolbar" class="icon-button collapse-button" type="button" title="隐藏工具栏" aria-label="隐藏工具栏">⌃</button>
+    </div>
+
+    <div id="status" class="status" role="status" aria-live="polite"></div>
+  </header>
+
+  <button id="reveal-toolbar" class="reveal-toolbar" type="button" title="显示工具栏" aria-label="显示工具栏" hidden>⌄</button>
+
+  <main id="viewer-container" class="viewer-container">
+    <section id="empty-state" class="empty-state">
+      <div class="empty-illustration">
+        <svg viewBox="0 0 120 120" aria-hidden="true">
+          <path d="M30 15h42l18 18v72H30z"/>
+          <path d="M72 15v20h18M43 55h34M43 68h34M43 81h24"/>
+        </svg>
+      </div>
+      <h1>打开一份英文 PDF</h1>
+      <p>选择本地文件、粘贴 PDF 网址，或把文件拖到这里。渲染完成后可直接划词翻译。</p>
+      <button id="empty-open-file" class="large-open-button" type="button">选择 PDF 文件</button>
+      <span class="empty-note">支持连续阅读、文字选择、缩放和页码跳转</span>
+    </section>
+
+    <div id="viewer" class="viewer" hidden></div>
+
+    <div id="loading-overlay" class="loading-overlay" hidden>
+      <div class="loading-card">
+        <div class="loading-spinner"></div>
+        <strong id="loading-title">正在打开 PDF</strong>
+        <span id="loading-progress">准备中…</span>
+      </div>
+    </div>
+
+    <div id="drop-overlay" class="drop-overlay" hidden>
+      <div>
+        <strong>松开鼠标以打开 PDF</strong>
+        <span>文件会在本地阅读器中打开</span>
+      </div>
+    </div>
+  </main>
+
+  <script src="../positioning.js"></script>
+  <script src="../output-formatting.js"></script>
+  <script src="../shortcuts.js"></script>
+  <script src="../content.js"></script>
+  <script type="module" src="reader.js"></script>
+</body>
+</html>

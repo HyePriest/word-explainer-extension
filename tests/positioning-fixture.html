@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Word Explainer positioning regression</title>
+  <style>
+    html, body { margin: 0; width: 100%; height: 100%; background: #f7f7f8; overflow: hidden; }
+    #selection {
+      position: absolute;
+      left: 372px;
+      top: 133px;
+      width: 1208px;
+      font: 24px/1.45 Arial, sans-serif;
+      color: white;
+      background: #356bd3;
+    }
+    #status { position: fixed; right: 12px; bottom: 10px; font: 12px Arial; }
+  </style>
+</head>
+<body>
+  <div id="selection">My son (20) is in a relationship with his 1st cousin (19 F). He’s an adult and lives on his own. I obviously don’t like this but still want to support him and from a legal standpoint he not doing anything wrong, as it is legal in the state we are in. How should I handle this situation?</div>
+  <div id="status">waiting</div>
+  <script>
+    const runtimeListeners = [];
+    globalThis.chrome = {
+      storage: {
+        local: {
+          get(defaults, callback) {
+            callback({ ...defaults, enabled: true, panelPinned: false, panelSize: { width: 616, height: 702 } });
+          },
+          set() {},
+          remove() {},
+        },
+        onChanged: { addListener() {} },
+      },
+      runtime: {
+        getURL(path) { return new URL(`../${path}`, location.href).href; },
+        onMessage: { addListener(listener) { runtimeListeners.push(listener); } },
+        connect() {
+          const messageListeners = [];
+          return {
+            onMessage: { addListener(listener) { messageListeners.push(listener); } },
+            onDisconnect: { addListener() {} },
+            disconnect() {},
+            postMessage() {
+              setTimeout(() => {
+                const popover = document.getElementById('we-extension-root')?.shadowRoot?.querySelector('.we-popover');
+                if (popover) popover.style.top = '205px';
+                for (const listener of messageListeners) listener({ type: 'CHUNK', text: '**测试译文**\n\n' });
+              }, 100);
+              setTimeout(() => {
+                for (const listener of messageListeners) listener({ type: 'CHUNK', text: '- **词组一**：测试内容。\n- **词组二**：测试内容。\n- **词组三**：测试内容。' });
+              }, 170);
+              setTimeout(() => {
+                for (const listener of messageListeners) listener({ type: 'DONE' });
+              }, 240);
+            },
+          };
+        },
+      },
+    };
+  </script>
+  <script src="../positioning.js"></script>
+  <script src="../output-formatting.js"></script>
+  <script src="../shortcuts.js"></script>
+  <script src="../theme.js"></script>
+  <script src="../content.js"></script>
+  <script>
+    const anchor = document.getElementById('selection');
+    window.__wordExplainer.explainText(anchor.textContent, { rect: anchor.getBoundingClientRect(), mode: 'ZH' });
+    setTimeout(() => {
+      const popover = document.getElementById('we-extension-root')?.shadowRoot?.querySelector('.we-popover');
+      const anchorRect = anchor.getBoundingClientRect();
+      const popoverRect = popover?.getBoundingClientRect();
+      const overlaps = popoverRect && !(
+        popoverRect.bottom <= anchorRect.top
+        || popoverRect.top >= anchorRect.bottom
+        || popoverRect.right <= anchorRect.left
+        || popoverRect.left >= anchorRect.right
+      );
+      document.body.dataset.ready = 'true';
+      document.body.dataset.overlaps = String(!!overlaps);
+      document.getElementById('status').textContent = JSON.stringify({
+        overlaps: !!overlaps,
+        placement: popover?.dataset.wePlacement || '',
+        anchorBottom: Math.round(anchorRect.bottom),
+        popoverTop: Math.round(popoverRect?.top || 0),
+        popoverBottom: Math.round(popoverRect?.bottom || 0),
+      });
+    }, 700);
+  </script>
+</body>
+</html>

@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Popover follow-up translation regression</title>
+  <style>
+    body { margin: 0; min-height: 1200px; font: 18px/1.6 sans-serif; }
+    main { padding: 180px 80px; }
+    #status { position: fixed; right: 12px; bottom: 10px; }
+  </style>
+</head>
+<body>
+  <main>
+    <p>Fixture for translating a word selected inside the current translation popover.</p>
+  </main>
+  <div id="status">waiting</div>
+  <script>
+    const requests = [];
+    globalThis.chrome = {
+      storage: {
+        local: {
+          get(_keys, callback) { callback({ enabled: true, panelPinned: false, showQuickSave: false }); },
+          set() {},
+          remove() {},
+        },
+        onChanged: { addListener() {} },
+      },
+      runtime: {
+        getURL(path) { return new URL(`../${path}`, location.href).href; },
+        onMessage: { addListener() {} },
+        sendMessage() { return Promise.resolve({ ok: true, result: { saved: false } }); },
+        connect() {
+          const messageListeners = [];
+          return {
+            onMessage: { addListener(listener) { messageListeners.push(listener); } },
+            onDisconnect: { addListener() {} },
+            disconnect() {},
+            postMessage(message) {
+              requests.push(message);
+              const responseWord = message.sourceKind === 'OCR' ? 'ocrresultword' : 'nestedword';
+              setTimeout(() => {
+                messageListeners.forEach((listener) => listener({
+                  type: 'CHUNK',
+                  text: `**译文：**\nResult for ${message.text}. Select ${responseWord}.`,
+                }));
+                messageListeners.forEach((listener) => listener({ type: 'DONE' }));
+              }, 20);
+            },
+          };
+        },
+      },
+    };
+
+    const wait = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
+    const closeEnough = (a, b) => Math.abs(a - b) <= 1;
+
+    function selectText(root, element, needle) {
+      const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+      let node;
+      while ((node = walker.nextNode())) {
+        const start = node.nodeValue.indexOf(needle);
+        if (start < 0) continue;
+        const range = document.createRange();
+        range.setStart(node, start);
+        range.setEnd(node, start + needle.length);
+        const selection = root.getSelection ? root.getSelection() : window.getSelection();
+        selection.removeAllRanges();
+        selection.addRange(range);
+        const rect = range.getBoundingClientRect();
+        element.dispatchEvent(new MouseEvent('mouseup', {
+          bubbles: true,
+          composed: true,
+          clientX: rect.left + rect.width / 2,
+          clientY: rect.top + rect.height / 2,
+        }));
+        return true;
+      }
+      return false;
+    }
+
+    async function clickFollowUp(root, selector) {
+      await wait(30);
+      const menu = root.querySelector('.we-result-action-menu');
+      const button = menu?.querySelector(selector);
+      if (!button) throw new Error(`Missing follow-up action ${selector}`);
+      button.click();
+      await wait(60);
+    }
+
+    window.addEventListener('load', async () => {
+      try {
+        await wait(80);
+        const anchor = { left: 120, right: 260, top: 210, bottom: 240, width: 140, height: 30 };
+        window.__wordExplainer.explainText('Initial selection', { rect: anchor, mode: 'ZH' });
+        await wait(380);
+
+        const root = document.getElementById('we-extension-root').shadowRoot;
+        let popover = root.querySelector('.we-popover');
+        const ordinaryStartRect = popover.getBoundingClientRect();
+        if (!selectText(root, popover.querySelector('.we-result'), 'nestedword')) {
+          throw new Error('Could not select nestedword in the ordinary result');
+        }
+        await clickFollowUp(root, '.we-result-action-zh');
+        popover = root.querySelector('.we-popover');
+        const ordinaryEndRect = popover.getBoundingClientRect();
+        const ordinaryPassed = requests.at(-1)?.text === 'nestedword'
+          && requests.at(-1)?.sourceKind === 'SELECTION'
+          && root.querySelectorAll('.we-popover').length === 1
+          && closeEnough(ordinaryStartRect.left, ordinaryEndRect.left)
+          && closeEnough(ordinaryStartRect.top, ordinaryEndRect.top);
+
+        window.__wordExplainer.explainText('OCR sourceword sample', {
+          rect: anchor,
+          mode: 'ZH',
+          kind: 'ocr',
+          context: 'OCR sourceword sample',
+          source: { kind: 'ocr', title: 'OCR fixture', url: location.href, documentId: 'ocr-fixture', page: null },
+        });
+        await wait(380);
+        popover = root.querySelector('.we-popover');
+        const ocrStartRect = popover.getBoundingClientRect();
+        if (!selectText(root, popover.querySelector('.we-ocr-source-text'), 'sourceword')) {
+          throw new Error('Could not select sourceword in the OCR source');
+        }
+        await clickFollowUp(root, '.we-result-action-zh');
+        popover = root.querySelector('.we-popover');
+        const ocrSourceEndRect = popover.getBoundingClientRect();
+        const ocrSourcePassed = requests.at(-1)?.text === 'sourceword'
+          && requests.at(-1)?.sourceKind === 'OCR'
+          && root.querySelectorAll('.we-popover').length === 1
+          && closeEnough(ocrStartRect.left, ocrSourceEndRect.left)
+          && closeEnough(ocrStartRect.top, ocrSourceEndRect.top);
+
+        window.__wordExplainer.explainText('OCR second sample', {
+          rect: anchor,
+          mode: 'ZH',
+          kind: 'ocr',
+          context: 'OCR second sample',
+          source: { kind: 'ocr', title: 'OCR fixture', url: location.href, documentId: 'ocr-fixture', page: null },
+        });
+        await wait(380);
+        popover = root.querySelector('.we-popover');
+        const ocrResultStartRect = popover.getBoundingClientRect();
+        if (!selectText(root, popover.querySelector('.we-result'), 'ocrresultword')) {
+          throw new Error('Could not select ocrresultword in the OCR result');
+        }
+        await clickFollowUp(root, '.we-result-action-en');
+        popover = root.querySelector('.we-popover');
+        const ocrResultEndRect = popover.getBoundingClientRect();
+        const ocrResultPassed = requests.at(-1)?.text === 'ocrresultword'
+          && requests.at(-1)?.sourceKind === 'SELECTION'
+          && requests.at(-1)?.mode === 'EN'
+          && root.querySelectorAll('.we-popover').length === 1
+          && closeEnough(ocrResultStartRect.left, ocrResultEndRect.left)
+          && closeEnough(ocrResultStartRect.top, ocrResultEndRect.top);
+
+        const result = {
+          ordinaryPassed,
+          ocrSourcePassed,
+          ocrResultPassed,
+          requestCount: requests.length,
+        };
+        document.body.dataset.result = JSON.stringify(result);
+        document.body.dataset.ready = String(ordinaryPassed && ocrSourcePassed && ocrResultPassed);
+        document.getElementById('status').textContent = JSON.stringify(result);
+      } catch (error) {
+        document.body.dataset.ready = 'false';
+        document.body.dataset.error = error.message;
+        document.getElementById('status').textContent = error.stack || error.message;
+      }
+    }, { once: true });
+  </script>
+  <script src="../positioning.js"></script>
+  <script src="../output-formatting.js"></script>
+  <script src="../shortcuts.js"></script>
+  <script src="../theme.js"></script>
+  <script src="../content.js"></script>
+</body>
+</html>

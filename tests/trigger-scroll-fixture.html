@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Trigger scroll fixture</title>
+  <style>
+    body { margin: 0; min-height: 2200px; font: 22px/1.6 sans-serif; }
+    main { padding: 280px 80px 0; }
+    #target { max-width: 760px; }
+  </style>
+</head>
+<body>
+  <main>
+    <p id="target">The translation trigger should remain attached to this sentence while the document scrolls.</p>
+  </main>
+  <script>
+    window.addEventListener('error', (event) => {
+      document.documentElement.dataset.scriptError = event.message || 'unknown script error';
+    });
+    window.chrome = {
+      runtime: {
+        getURL(path) { return new URL(`../${path}`, location.href).href; },
+        onMessage: { addListener() {} },
+        sendMessage() { return Promise.resolve({}); },
+        connect() { return { onMessage: { addListener() {} }, onDisconnect: { addListener() {} }, postMessage() {}, disconnect() {} }; },
+      },
+      storage: {
+        local: {
+          get(_keys, callback) { callback({ enabled: true, showQuickSave: false }); },
+          set() {},
+        },
+        onChanged: { addListener() {} },
+      },
+    };
+  </script>
+  <script src="../positioning.js"></script>
+  <script src="../output-formatting.js"></script>
+  <script src="../shortcuts.js"></script>
+  <script src="../theme.js"></script>
+  <script src="../ocr-layout.js"></script>
+  <script>
+    const ocrCanvas = document.createElement('canvas');
+    ocrCanvas.width = 520;
+    ocrCanvas.height = 92;
+    const ocrContext = ocrCanvas.getContext('2d');
+    ocrContext.fillStyle = '#fff';
+    ocrContext.fillRect(0, 0, ocrCanvas.width, ocrCanvas.height);
+    ocrContext.fillStyle = '#111';
+    ocrContext.font = '22px sans-serif';
+    ocrContext.fillText('This is the first English line for OCR.', 10, 31);
+    ocrContext.fillText('This is the second English line for OCR.', 10, 70);
+    const ocrResult = WordExplainerOcrLayout.chooseCanvasPageSegmentation(ocrCanvas, {
+      SINGLE_LINE: 'single-line',
+      SINGLE_BLOCK: 'single-block',
+      AUTO: 'auto',
+    });
+    document.documentElement.dataset.ocrMode = ocrResult.mode;
+    document.documentElement.dataset.ocrLines = String(ocrResult.analysis.lineCount);
+  </script>
+  <script src="../content.js"></script>
+</body>
+</html>

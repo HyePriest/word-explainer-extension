@@ -1,0 +1,23 @@
+# Local credentials and environment configuration
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Generated files and local tooling
+node_modules/
+coverage/
+release/
+*.log
+*.tmp
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Windows launcher's generated local installation files
+windows-launcher/config.json
+windows-launcher/*.exe
+
+# Keep bundled PDF/OCR engines, fonts, language data and licenses tracked.
