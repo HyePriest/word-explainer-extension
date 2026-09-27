@@ -86,3 +86,8 @@ node tests/run-tests.js
 ## 第三方组件
 
 PDF 阅读与 OCR 使用随项目分发的第三方组件；版本和许可证索引见 [第三方声明](THIRD_PARTY_NOTICES.md)。
+
+## 许可证
+
+项目自身代码采用 [MIT License](LICENSE)，作者 HyePriest。随附第三方组件保留各自的许可证，详见 [第三方声明](THIRD_PARTY_NOTICES.md)。
+
