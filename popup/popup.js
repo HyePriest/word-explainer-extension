@@ -53,6 +53,8 @@ chrome.storage.local.get({ enabled: false, model: DEFAULT_MODEL, apiKey: '', sho
 
   if (apiKey) {
     apiKeyInput.placeholder = `已保存 ····${apiKey.slice(-4)}`;
+  } else {
+    document.getElementById('settings').open = true;
   }
 });
 

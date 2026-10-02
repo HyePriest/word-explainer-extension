@@ -6,11 +6,11 @@
 (function () {
   'use strict';
 
-  const { calculatePopoverPlacement, rectanglesOverlap } = WordExplainerPositioning;
-  const { normalizeExplanationMarkdown } = WordExplainerOutputFormatting;
+  const { calculatePopoverPlacement, calculateTriggerOrigin, rectanglesOverlap } = WordExplainerPositioning;
+  const { normalizeExplanationMarkdown, classifyInput, parseMarkdown } = WordExplainerOutputFormatting;
   const { isPageOcrShortcut } = WordExplainerShortcuts;
 
-  const CONTENT_BUILD = '2.5.9';
+  const CONTENT_BUILD = '2.5.10';
   const previousUiHost = document.getElementById('we-extension-root');
   if (previousUiHost?.dataset.weContentBuild === CONTENT_BUILD && previousUiHost.shadowRoot) return;
   previousUiHost?.remove();
@@ -39,6 +39,8 @@
   let pageOcrShortcutPending = false;
   let pageOcrStatusEl = null;
   let resultSelectionMenu = null;
+  let selectionTimer = null;
+  let selectionRevision = 0;
   let resolveSettingsReady;
   const settingsReady = new Promise((resolve) => { resolveSettingsReady = resolve; });
   const MAX_INPUT_CHARACTERS = 20_000;
@@ -154,8 +156,17 @@
   // ---- 事件：检测鼠标划选 ----
   // 使用捕获阶段，避免 B 站评论区等网页拦截 mouseup 后插件收不到事件。
   document.addEventListener('mouseup', onMouseUp, true);
+  document.addEventListener('mousedown', cancelPendingSelection, true);
+
+  function cancelPendingSelection() {
+    selectionRevision += 1;
+    clearTimeout(selectionTimer);
+  }
 
   function onMouseUp(e) {
+    cancelPendingSelection();
+    const revision = selectionRevision;
+    if (e.button !== 0 || !uiHost.isConnected) return;
     const mouseX = e.clientX;
     const mouseY = e.clientY;
     const eventPath = e.composedPath();
@@ -183,8 +194,14 @@
     }
 
     // 情况 4：检测划选，展示触发按钮
-    setTimeout(() => {
-      if (!extensionEnabled) return;
+    // 播放器双击及控件点击不能拿旧选区或附近文字当作新划词。
+    if (eventPath.some((node) => node instanceof Element && node.matches(
+      'video, audio, button, [role="button"], .bpx-player-container, .bilibili-player-video-wrap, .html5-video-player'
+    ))) return;
+
+    selectionTimer = setTimeout(async () => {
+      await settingsReady;
+      if (!extensionEnabled || revision !== selectionRevision || !uiHost.isConnected) return;
 
       const selected = readSelection(eventPath, { x: mouseX, y: mouseY }, e.detail >= 2);
       if (!selected) return;
@@ -301,6 +318,12 @@
       range.setStart(node, start);
       range.setEnd(node, end);
       const rawRect = range.getBoundingClientRect();
+      // 光标 API 在视频、空白区也可能返回最近的文本节点，必须命中实际字符。
+      const hitWord = Array.from(range.getClientRects()).some((rect) => (
+        point.x >= rect.left - 2 && point.x <= rect.right + 2
+        && point.y >= rect.top - 2 && point.y <= rect.bottom + 2
+      ));
+      if (!hitWord) return null;
       return {
         text: match[0],
         range,
@@ -424,20 +447,10 @@
     return classifyInput(text) === 'PASSAGE';
   }
 
-  function classifyInput(text) {
-    const normalized = text.trim();
-    const wordCandidate = normalized.replace(/^[^\p{L}\p{M}]+|[^\p{L}\p{M}'’\-]+$/gu, '');
-    if (wordCandidate && /^[\p{L}\p{M}]+(?:['’\-][\p{L}\p{M}]+)*$/u.test(wordCandidate)) return 'WORD';
-
-    const wordCount = (normalized.match(/[\p{L}\p{M}]+(?:['’\-][\p{L}\p{M}]+)*/gu) || []).length;
-    const hasSentenceEnding = /[.!?。！？](?:[\s”’"')\]]|$)/u.test(normalized);
-    if (wordCount > 0 && wordCount <= 8 && !hasSentenceEnding && !normalized.includes('\n')) return 'PHRASE';
-    return 'PASSAGE';
-  }
-
   // ESC 键关闭
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
+      cancelPendingSelection();
       if (pageOcrSession) cancelPageOcr();
       if (currentPopover) dismissPopover();
       if (triggerBtns.length > 0) dismissTrigger();
@@ -826,8 +839,6 @@
   function showTriggerButton(rect, mouseX, mouseY) {
     // 触发按钮属于页面内容坐标系。这样页面滚动时它会跟着原文自然移动，
     // 而不是固定在视口中或在第一次 scroll 事件时被销毁。
-    const originX = mouseX + window.scrollX;
-    const originY = mouseY + window.scrollY;
     const longText = isLongText(pendingText || '');
     const supportsEnglishExplanation = isLatinBasedText(pendingText || '');
     const triggerDy = chooseTriggerVerticalOffset(mouseX, mouseY);
@@ -855,6 +866,17 @@
         dy: triggerDy,
       });
     }
+
+    const viewport = window.visualViewport;
+    const offsetLeft = viewport?.offsetLeft || 0;
+    const offsetTop = viewport?.offsetTop || 0;
+    const origin = calculateTriggerOrigin({
+      x: mouseX - offsetLeft, y: mouseY - offsetTop, offsets: configs,
+      viewportWidth: viewport?.width || document.documentElement.clientWidth || window.innerWidth,
+      viewportHeight: viewport?.height || window.innerHeight,
+    });
+    const originX = origin.x + offsetLeft + window.scrollX;
+    const originY = origin.y + offsetTop + window.scrollY;
 
     configs.forEach((cfg) => {
       const btn = document.createElement('div');
@@ -2020,75 +2042,6 @@
       .replace(/</g, '&lt;')
       .replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;');
-  }
-
-  function parseMarkdown(md) {
-    let html = escapeHtml(md);
-
-    // 粗体
-    html = html.replace(/\*\*(.+?)\*\*/gs, '<strong>$1</strong>');
-    // 斜体
-    html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
-    // 行内代码
-    html = html.replace(/`(.+?)`/g, '<code>$1</code>');
-
-    // 表格预处理
-    const tableRegex = /(\|.+\|\n\|[-:\s|]+\|\n)((?:\|.+\|\n?)+)/g;
-    html = html.replace(tableRegex, (match, headerSep, dataLines) => {
-      const headers = headerSep.split('\n')[0].split('|').filter(c => c.trim()).map(c => c.trim());
-      const rows = dataLines.trim().split('\n').map(line => {
-        const cells = line.split('|').filter(c => c.trim()).map(c => c.trim());
-        return '<tr>' + cells.map(c => '<td>' + c + '</td>').join('') + '</tr>';
-      }).join('');
-      return '<table><thead><tr>' + headers.map(h => '<th>' + h + '</th>').join('') + '</tr></thead><tbody>' + rows + '</tbody></table>';
-    });
-
-    // Block 级处理
-    const lines = html.split('\n');
-    const result = [];
-    let inList = false;
-
-    for (const line of lines) {
-      const trimmed = line.trim();
-
-      // 水平分割线
-      if (/^(-{3,}|\*{3,}|_{3,})$/.test(trimmed)) {
-        if (inList) { result.push('</ul>'); inList = false; }
-        result.push('<hr>');
-        continue;
-      }
-
-      // 标题
-      const headingMatch = trimmed.match(/^(#{1,6})\s(.+)$/);
-      if (headingMatch) {
-        if (inList) { result.push('</ul>'); inList = false; }
-        const level = headingMatch[1].length;
-        result.push(`<h${level}>${headingMatch[2]}</h${level}>`);
-        continue;
-      }
-
-      // 无序列表
-      if (/^[-*]\s/.test(trimmed)) {
-        if (!inList) { result.push('<ul>'); inList = true; }
-        result.push('<li>' + trimmed.replace(/^[-*]\s/, '') + '</li>');
-        continue;
-      }
-
-      if (inList) { result.push('</ul>'); inList = false; }
-
-      // 已是 HTML block
-      if (/^<(table|thead|tbody|tr|th|td)\b/.test(trimmed)) {
-        result.push(trimmed);
-        continue;
-      }
-
-      if (trimmed === '') { result.push('<br>'); continue; }
-
-      result.push('<p>' + trimmed + '</p>');
-    }
-
-    if (inList) result.push('</ul>');
-    return result.join('');
   }
 
   // ============================================================

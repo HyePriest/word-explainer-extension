@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "划词解释 · Word Explainer",
-  "version": "2.5.9",
+  "version": "2.5.10",
   "description": "多语言划词 AI 解释、拼写检查、朗读、PDF、区域 OCR 与生词整理工具",
   "permissions": ["activeTab", "storage", "offscreen", "scripting"],
   "host_permissions": ["<all_urls>"],
@@ -13,11 +13,11 @@
     "default_title": "划词解释"
   },
   "commands": {
-    "translate-selection-direct": {
+    "_execute_action": {
       "suggested_key": {
         "default": "Ctrl+Shift+X"
       },
-      "description": "直接翻译当前选中的文字"
+      "description": "打开划词解释，粘贴文字快速翻译"
     }
   },
   "background": {

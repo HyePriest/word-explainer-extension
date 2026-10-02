@@ -121,20 +121,7 @@ chrome.runtime.onConnect.addListener((port) => {
   });
 });
 
-chrome.commands.onCommand.addListener(async (command) => {
-  if (command !== 'translate-selection-direct') return;
-  try {
-    const [tab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
-    if (!tab?.id) return;
-    if (tab.url?.startsWith(chrome.runtime.getURL('pdf/reader.html'))) {
-      await chrome.runtime.sendMessage({ type: 'TRANSLATE_SELECTION', targetUrl: tab.url });
-    } else {
-      await chrome.tabs.sendMessage(tab.id, { type: 'TRANSLATE_SELECTION' });
-    }
-  } catch (_) {
-    // Chrome 内置页面等禁止注入内容脚本的页面会静默忽略快捷键。
-  }
-});
+// _execute_action 由浏览器直接打开弹窗，在新标签页上也有效。
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message?.type === 'PAGE_OCR_SHORTCUT_TRIGGER') {

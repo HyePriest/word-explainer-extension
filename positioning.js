@@ -89,5 +89,17 @@
     );
   }
 
-  return { calculatePopoverPlacement, rectanglesOverlap };
+  // 整组平移，避免分别钳制时多个按钮堆叠；预留 hover 和弹跳动画空间。
+  function calculateTriggerOrigin({ x, y, offsets, viewportWidth, viewportHeight, radius = 26 }) {
+    const minDx = Math.min(0, ...offsets.map((item) => item.dx * 1.08));
+    const maxDx = Math.max(0, ...offsets.map((item) => item.dx * 1.08));
+    const minDy = Math.min(0, ...offsets.map((item) => item.dy * 1.08));
+    const maxDy = Math.max(0, ...offsets.map((item) => item.dy * 1.08));
+    return {
+      x: clamp(x, radius - minDx, viewportWidth - radius - maxDx),
+      y: clamp(y, radius - minDy, viewportHeight - radius - maxDy),
+    };
+  }
+
+  return { calculatePopoverPlacement, calculateTriggerOrigin, rectanglesOverlap };
 });

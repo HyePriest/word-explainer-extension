@@ -5,6 +5,7 @@ const manifest = require('../manifest.json');
 const { isPageOcrShortcut } = require('../shortcuts.js');
 const {
   calculatePopoverPlacement,
+  calculateTriggerOrigin,
   rectanglesOverlap,
 } = require('../positioning.js');
 const {
@@ -204,7 +205,8 @@ test('明确的单行 OCR 区域仍使用单行模式', () => {
 
 test('网页 OCR 使用 Win+Shift+Y，不再占用扩展快捷键槽', () => {
   assert.equal(manifest.commands['start-page-ocr'], undefined);
-  assert.equal(manifest.commands['translate-selection-direct'].suggested_key.default, 'Ctrl+Shift+X');
+  assert.equal(manifest.commands['translate-selection-direct'], undefined);
+  assert.equal(manifest.commands._execute_action.suggested_key.default, 'Ctrl+Shift+X');
   assert.equal(isPageOcrShortcut({ code: 'KeyY', shiftKey: true, metaKey: true }, 'Win32'), true);
   assert.equal(isPageOcrShortcut({ code: 'KeyY', shiftKey: true, metaKey: false }, 'Win32'), false);
   assert.equal(isPageOcrShortcut({ code: 'KeyY', shiftKey: true, metaKey: true, repeat: true }, 'Win32'), false);
@@ -232,6 +234,32 @@ test('单行或行数过多时不会强行拆分 OCR', () => {
   const manyLines = createSyntheticTextImage(420, 96, manyBands);
   const manyLineAnalysis = analyzeTextLines(manyLines, manyLines.width, manyLines.height);
   assert.deepEqual(getTextLineRegions(manyLineAnalysis, manyLines.width, manyLines.height), []);
+});
+
+test('划词按钮在四角及窄窗口内保持可见，弹跳时也不越界或重叠', () => {
+  for (const viewportWidth of [180, 320, 1280]) {
+    const viewportHeight = 240;
+    for (const x of [0, 5, viewportWidth / 2, viewportWidth - 1]) {
+      for (const y of [0, 5, viewportHeight / 2, viewportHeight - 1]) {
+        for (const dxs of [[0], [-44, 44], [-50, 50, 0]]) {
+          for (const dy of [-50, 50]) {
+            const offsets = dxs.map((dx) => ({ dx, dy }));
+            const origin = calculateTriggerOrigin({ x, y, offsets, viewportWidth, viewportHeight });
+            for (const factor of [0, 1, 1.08]) {
+              for (const offset of offsets) {
+                const cx = origin.x + offset.dx * factor;
+                const cy = origin.y + offset.dy * factor;
+                assert.ok(cx >= 26 && cx <= viewportWidth - 26);
+                assert.ok(cy >= 26 && cy <= viewportHeight - 26);
+              }
+            }
+            const centers = dxs.map((dx) => origin.x + dx).sort((a, b) => a - b);
+            for (let i = 1; i < centers.length; i++) assert.ok(centers[i] - centers[i - 1] >= 44);
+          }
+        }
+      }
+    }
+  }
 });
 
 process.stdout.write(`\n${passed} 项回归测试全部通过。\n`);
