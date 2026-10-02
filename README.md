@@ -4,43 +4,35 @@
 
 面向桌面 Chromium 浏览器的 Manifest V3 扩展。无需构建即可加载；解释与翻译使用用户自己的 DeepSeek API Key。
 
-## 功能
+## 下载与安装
 
-- **划词解释**：选择单词、短语或段落，查看中文或英文解释，支持流式输出。
-- **继续查词**：在解释结果和 OCR 原文中继续划词，复用当前解释框。
-- **区域 OCR**：框选网页或 PDF 中的英文图片文字，在本机识别后请求解释。
-- **PDF 阅读**：打开本地 PDF 或在线 PDF 链接，支持划词、缩放和区域 OCR。
-- **生词整理**：保存单词及上下文、来源，复制 Markdown，导出与导入 JSON 备份。
-- **朗读与外观**：调用浏览器朗读，支持跟随系统、浅色和深色主题。
-- **Windows PDF 启动器**：可选安装，为 PDF 添加右键打开入口。
+**[⬇ 下载最新版插件 ZIP](https://github.com/HyePriest/word-explainer-extension/releases/latest/download/word-explainer.zip)** · [查看版本与更新说明](https://github.com/HyePriest/word-explainer-extension/releases)
 
-## 安装
+适用于电脑上的 Chrome、Edge 浏览器。下载后即可安装，不需要编译。
 
-1. 下载本仓库代码并解压，或克隆仓库到本机，保留完整目录。
-2. 在 Chrome 打开 `chrome://extensions`；使用 Edge 时打开 `edge://extensions`。
-3. 开启“开发者模式”，点击“加载已解压的扩展程序”。
-4. 选择包含 `manifest.json` 的项目目录。
-5. 点击浏览器工具栏中的扩展图标，展开“设置与其他工具”，填写并保存自己的 DeepSeek API Key；需要网页划词时开启划词解释。
-6. 刷新已打开的网页，再选择文字使用。
+1. 点击上面的下载链接，**解压 ZIP**。
+2. Chrome 地址栏输入 `chrome://extensions`；Edge 输入 `edge://extensions`。
+3. 开启右上角的**开发者模式**，点击**加载已解压的扩展程序**。
+4. 选择解压后的 **`word-explainer` 文件夹**，里面应当直接有 `manifest.json`。
+5. 打开浏览器工具栏里的插件，在**设置与其他工具**中填写并保存自己的 **DeepSeek API Key**。
 
-扩展不附带 API Key。解释与翻译需要联网，请求费用由所配置的服务账户承担。模型选项以扩展设置界面为准；实际可用性取决于服务端和账户权限。
+也可以点击仓库的 `Code → Download ZIP` 下载源码，解压后选择里面直接包含 `manifest.json` 的文件夹安装。
 
-Windows PDF 启动器目前针对 Chrome，安装方法见 [Windows PDF 使用说明](windows-launcher/README-Windows-PDF.md)。它不是使用插件的必需步骤。
+## 怎么用
 
-## 使用
+- **网页查词**：在插件里开启“划词解释”，刷新网页，然后选中文字，点击解释按钮。
+- **粘贴翻译**：按 `Ctrl+Shift+X` 打开插件，粘贴文字就会翻译。手动输入后，点击“翻译”或按 `Ctrl+Enter`。
+- **读 PDF**：在插件里打开 PDF 阅读器，再选择或拖入 PDF 文件。
+- **识别图片英文**：点击“区域 OCR”，框选要识别的区域。
+- **整理生词**：保存单词后，在“生词本”查看、复制或导出。
 
-| 场景 | 操作 |
-| --- | --- |
-| 网页查词 | 选中文字，点击中文解释或英文解释按钮 |
-| 唤醒并快速翻译 | `Ctrl+Shift+X` 打开插件，`Ctrl+V` 粘贴后自动翻译；新标签页也可用。手动输入后按 `Ctrl+Enter` 或点击翻译 |
-| 网页区域 OCR | 扩展弹窗中点击区域 OCR；Windows 也可使用 `Win+Shift+Y` |
-| 阅读 PDF | 从扩展弹窗打开 PDF 阅读器，选择或拖入本地 PDF，也可填写在线链接 |
-| 扫描版 PDF | 在插件的 PDF 阅读器中使用区域 OCR |
-| 整理生词 | 从扩展弹窗打开生词本，复制 Markdown 或导出 JSON |
+解释与翻译需要你自己的 API Key，会产生相应的服务费用；图片 OCR 在本机运行，目前支持英文。
 
-快捷键可能与系统或其他程序冲突，遇到冲突可使用按钮入口。网页 OCR 快捷键需要当前网页获得焦点。
+**快捷键没反应？** 在 `chrome://extensions/shortcuts`（Edge 使用 `edge://extensions/shortcuts`）中，将本插件的“激活扩展程序”设为 `Ctrl+Shift+X`，也可以直接点击工具栏里的插件图标。
 
-从旧版更新后，如 `Ctrl+Shift+X` 没有打开插件，请在 `chrome://extensions/shortcuts` 中把本插件的“激活扩展程序”设为 `Ctrl+Shift+X`。弹窗会显示浏览器实际分配的快捷键。快速翻译独立于网页划词开关，需先保存 API Key；关闭弹窗会取消尚未完成的翻译。
+**更新插件**：先导出生词备份，将新版解压后覆盖原插件文件夹，再到扩展管理页点击插件的“重新加载”，并刷新网页。保留原安装目录，不要先删除插件。
+
+需要 Windows 的 PDF 右键打开功能，可另外按 [Windows PDF 使用说明](windows-launcher/README-Windows-PDF.md) 安装启动器。
 
 ## 数据与隐私
 
